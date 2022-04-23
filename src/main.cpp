@@ -84,6 +84,7 @@
 #define DEBOUNCE_BUT_R2             DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_SELECT         DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_START          DEBOUNCE_DEFAULT_MS
+#define DEBOUNCE_BUT_PS             DEBOUNCE_DEFAULT_MS
 // Same for D-pad
 #define DEBOUNCE_BUT_DPAD_UP        DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_DPAD_DOWN      DEBOUNCE_DEFAULT_MS
@@ -124,7 +125,8 @@ namespace board_config
     PIN_R1        = 16,
     PIN_R2        = 15,
     PIN_SELECT    = 18, // A0
-    PIN_START     = 19  // A1
+    PIN_START     = 19, // A1
+    PIN_PS        = 20  // A2
     //*/
     
     // For UNO (this is mostly for wokwi emulator debuging, UNO has no USBHID compatibility):    
@@ -134,7 +136,8 @@ namespace board_config
     PIN_R2        = 13,
     // At this point we're out of digital pins on UNO
     PIN_SELECT    = 14, // A0
-    PIN_START     = 15  // A1
+    PIN_START     = 15, // A1
+    PIN_PS        = 16  // A2
     //*/
   };
 };
@@ -1088,6 +1091,32 @@ class Btn_START : public ButtonDebounced
       }    
     }
 };
+
+class Btn_PS : public ButtonDebounced
+{
+  public:
+    constexpr Btn_PS(enPinsBUTTONS pin = enPinsBUTTONS::PIN_PS, unsigned long debounceMs = DEBOUNCE_BUT_PS) noexcept : ButtonDebounced(pin, debounceMs)
+    {}
+
+  protected:
+    virtual void reportTo(hid_report_t& target) const noexcept 
+    {
+      constexpr auto mask = bfButtonHID::HID_PS;
+      auto& buttons = target.buttons;
+
+      if(btnIsPressed())
+      {
+        regButtonPressed(buttons, mask);
+        debugPrintf_BUTTONS("Button Pressed:  [PS]");
+      }
+      else
+      {
+        regButtonReleased(buttons, mask);
+        debugPrintf_BUTTONS_RELEASED("Button Released:  [PS]");
+      }      
+    }
+};
+
 //==========================================//
 
 
@@ -1168,7 +1197,8 @@ namespace buttons_storage
   static const auto R2        = Btn_R2();
   static const auto Select    = Btn_SELECT();
   static const auto Start     = Btn_START();
-  static const auto dpad      = Dpad(SOCD_STRATEGY_TO_USE_); // <---- change this if you'd like a different SOCD strategy
+  static const auto PS        = Btn_PS();
+  static const auto dpad      = Dpad(SOCD_STRATEGY_TO_USE_); // <---- change SOCD_STRATEGY_TO_USE (no underscore) definition to use different one
 };
 
 
@@ -1193,6 +1223,7 @@ namespace all
       &R2,
       &Select,
       &Start,
+      &PS,
       &dpad
     };
   };
