@@ -65,6 +65,7 @@
 // SOCD cleaning type. options are: 
 //     socd_strategies::tournamentLegal
 //     socd_strategies::allNeutral
+//     socd_strategies::lastInputPriority
 //     undefine to use no cleaning strategy
 #define SOCD_STRATEGY_TO_USE socd_strategies::tournamentLegal
 
@@ -652,7 +653,64 @@ namespace cleaner_strategy
       }
     }
   };
+  
+  struct LastInputPriority : public SOCD_CleaningStrategy
+  {
+    bool m_prev_up     = false;
+    bool m_prev_down   = false;
+    bool m_prev_left   = false;
+    bool m_prev_right  = false;
+    
+    inline void cleanCardinal(bool& dir1, bool& dir2, bool& prev_dir1, bool& prev_dir2) noexcept
+    {
+      if(dir1 && dir2)
+      {
+        if(dir1 && prev_dir2)
+        {
+          dir2 = false;
+        }
 
+        if(dir2 && prev_dir1)
+        {
+          dir1 = false;
+        }
+      }
+      else
+      {
+        prev_dir1   = dir1;
+        prev_dir2   = dir2;
+      }
+    }
+
+    virtual void clean(bool& up, bool& down, bool& left, bool& right) noexcept override
+    {
+      cleanCardinal(up,   down,   m_prev_up,  m_prev_down);
+      cleanCardinal(left, right, m_prev_left, m_prev_right);
+
+      // Clean up/down
+      // if(up && down)
+      // {
+      //   if(up && m_prev_down)
+      //   {
+      //     debugPrintf_SOCD("LastInputPriority SOCD: DOWN + UP = UP");
+      //     down = false;
+      //   }
+
+      //   if(down && m_prev_up)
+      //   {
+      //     debugPrintf_SOCD("LastInputPriority SOCD: UP + DOWN = DOWN");
+      //     up = false;
+      //   }
+      // }
+      // else
+      // {
+      //   m_prev_up   = up;
+      //   m_prev_down = down;
+      // }
+    }
+
+  };
+  
   //Todo: Composite strategy switcher
 };
 
@@ -1115,8 +1173,9 @@ constexpr _Gamepad<ARR> Gamepad(const ARR& buttons) noexcept
 namespace socd_strategies
 {
   using namespace cleaner_strategy;
-  static constexpr cleaner_strategy::AllNeutral allNeutral = {};
-  static constexpr cleaner_strategy::TournamentLegal tournamentLegal = {};
+  static constexpr cleaner_strategy::AllNeutral         allNeutral        = {};
+  static constexpr cleaner_strategy::TournamentLegal    tournamentLegal   = {};
+  static constexpr cleaner_strategy::LastInputPriority  lastInputPriority = {};
 };
 
 // All Buttons objects reside here
