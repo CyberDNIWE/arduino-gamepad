@@ -514,112 +514,51 @@ class ButtonBase : public HidReportable
 class Debouncer
 {
   public:
-    enum STATE
+    static constexpr bool PRESSED   = 1;
+    static constexpr bool UNPRESSED = 0;
+
+    constexpr Debouncer(unsigned long debounceTime) noexcept : m_debounceTime(debounceTime), m_pressTime(0UL), m_previous(Debouncer::UNPRESSED)
+    {}
+
+    bool debounce(bool actuallyPressed) noexcept
     {
-      DEBOUNCE_PRESSED,
-      PREPARE_DEBOUNCE_PRESSED,
-      RESET,
-      PREPARE_DEBOUNCE_OPENING,
-      DEBOUNCE_OPENING
-    };
-
-    constexpr Debouncer(unsigned long debounceTime) noexcept : m_debounceTime(debounceTime)
-    {}    
-
-    bool debounce(bool actuallyPressed) const noexcept
-    {
-      auto now = getTimeSinceStart();
-      bool timespanEnded = isResponsive(now);
-      bool ret = false;
-
-      switch(m_debouncePhase)
-      {
-        case STATE::DEBOUNCE_PRESSED:
-        {
-          if(!m_pressTime && actuallyPressed && timespanEnded)
-          {
-            debugPrintf_DEBOUNCE("1");
-            m_pressTime = now;
-            m_debouncePhase = STATE::PREPARE_DEBOUNCE_PRESSED;
-            ret = true;
-          }
-          break;
-        }
-        
-        case STATE::PREPARE_DEBOUNCE_OPENING:
-        {          
-          if(!actuallyPressed)
-          {
-            debugPrintf_DEBOUNCE("2"); 
-            m_pressTime = now;
-            m_debouncePhase = STATE::DEBOUNCE_OPENING;
-            ret = false;
-          }
-          else
-          {
-            ret = true;
-          }
-
-          break;
-        }
-
-        case STATE::DEBOUNCE_OPENING:
-        {
-          if(timespanEnded && !actuallyPressed)
-          {
-            debugPrintf_DEBOUNCE("3");
-            m_debouncePhase = STATE::RESET;
-          }
-          else
-          {
-            debugPrintf_DEBOUNCE("4");
-          }
-
-          ret = false;
-          break;
-        }
-
-        case STATE::PREPARE_DEBOUNCE_PRESSED:
-        {
-          if(actuallyPressed && timespanEnded)
-          {
-            debugPrintf_DEBOUNCE("5");
-            m_debouncePhase = STATE::PREPARE_DEBOUNCE_OPENING;
-            ret = true;
-          }
-          else if(timespanEnded)
-          {
-            debugPrintf_DEBOUNCE("6");
-            m_debouncePhase = STATE::RESET;
-            ret = false;
-          }
-          else
-          {
-            debugPrintf_DEBOUNCE("7");
-            ret = true;
-          }
-
-          break;
-        }
-
-        case STATE::RESET:
-        {          
-          if(timespanEnded)
-          {
-            debugPrintf_DEBOUNCE("8");
-            m_pressTime = 0;
-            m_debouncePhase = STATE::DEBOUNCE_PRESSED;
-          }
-
-          ret = false;
-          break;
-        }
-
-        default: 
-          break;
-      }
+      const auto now = getTimeSinceStart();
       
-      return ret;
+      if(m_previous != actuallyPressed)
+      {
+        debugPrintf_DEBOUNCE("Debouncer: detected state change");
+        if(m_pressTime)
+        {
+          if(now > (m_pressTime + m_debounceTime))
+          {
+            debugPrintf_DEBOUNCE("Debouncer: reseting debounce time");
+            m_previous = actuallyPressed;
+            m_pressTime = now;
+          }
+        }
+        else
+        {
+          debugPrintf_DEBOUNCE("Debouncer: registering state change, setting debounce time");
+          m_previous = actuallyPressed;
+          m_pressTime = now;
+        }
+
+
+
+      #ifdef DEBUG_PRINT_ENABLED
+        if(m_previous)
+        {
+          debugPrintf_DEBOUNCE("Debouncer: sending PRESSED");
+        }
+        else
+        {
+          debugPrintf_DEBOUNCE("Debouncer: sending RELEASED");
+        }
+      #endif
+        
+      }
+
+      return m_previous;
     }    
     
   protected:
@@ -628,14 +567,10 @@ class Debouncer
       return millis();
     }
 
-    inline bool isResponsive(unsigned long current) const noexcept
-    {
-      return current > (m_pressTime + m_debounceTime);
-    }
-
-    mutable STATE m_debouncePhase        = STATE::RESET;
-    const unsigned long m_debounceTime   = 0;
-    mutable unsigned long m_pressTime    = 0;
+    
+    bool m_previous                     = Debouncer::UNPRESSED;
+    unsigned long m_pressTime           = 0;
+    const unsigned long m_debounceTime  = 0;
 };
 
 // Debounced button - just a regular ButtonBase that has its press debounced
