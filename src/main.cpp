@@ -1,6 +1,5 @@
 // Originally forked from https://github.com/jfedor2/gamepad/ , but departed so much it became it's own thing
 // Author: CyberDNIWE
-
 // Debugging is a pain with no real step-through, so use these macroses to easily remove printouts from sources at will
 // Just coment out defines like DEBUG_PRINT_ENABLED to remove ALL printouts (suggested for final build)
 // Or each individual DEBUG_PRINT_XXXXX to remove specific ones. (useful for debugging)
@@ -61,12 +60,12 @@
 # define  debugPrintf_SOCD(str)            REMOVED_FROM_SOURCE
 # define debugPrintf_BUTTONS_RELEASED(str) REMOVED_FROM_SOURCE
 #endif
- 
+
 // SOCD cleaning type. options are: 
+//     socd_strategies::none
 //     socd_strategies::tournamentLegal
 //     socd_strategies::allNeutral
 //     socd_strategies::lastInputPriority
-//     undefine to use no cleaning strategy
 #define SOCD_STRATEGY_TO_USE socd_strategies::tournamentLegal
 
 
@@ -129,7 +128,7 @@ namespace board_config
     PIN_START     = 19, // A1
     PIN_PS        = 20  // A2
     //*/
-    
+
     // For UNO (this is mostly for wokwi emulator debuging, UNO has no USBHID compatibility):    
     /*
     PIN_L2        = 11,
@@ -237,10 +236,10 @@ enum bfButtonHID : uint16_t
 // 0 = up, 1 = up/right, 2 = right etc., 0x0f = neutral
 enum DpadHID : uint8_t
 {
-  DPAD_UP       = 0, //0b00000000
-  DPAD_DOWN     = 4, //0b00000100
-  DPAD_LEFT     = 6, //0b00000110
-  DPAD_RIGHT    = 2, //0b00000010
+  DPAD_UP       = 0,    //0b00000000
+  DPAD_DOWN     = 4,    //0b00000100
+  DPAD_LEFT     = 6,    //0b00000110
+  DPAD_RIGHT    = 2,    //0b00000010
   DPAD_NEUTRAL  = 0x0f  //0b11111111
 };
 
@@ -714,7 +713,7 @@ namespace cleaner_strategy
 
 // For convenience and readability: define Dpad's constructor parameters with their default values
 #define _DPAD_CTOR_PARAMS \
-const cleaner_strategy::SOCD_CleaningStrategy* cleaner = &Dpad::noCleaning, \
+const cleaner_strategy::SOCD_CleaningStrategy* cleaner = nullptr, \
 enPinsBUTTONS pin_up     = enPinsBUTTONS::PIN_UP,      unsigned long btn_up_debuonceMs    = DEBOUNCE_DEFAULT_MS, \
 enPinsBUTTONS pin_down   = enPinsBUTTONS::PIN_DOWN,    unsigned long btn_down_debuonceMs  = DEBOUNCE_DEFAULT_MS, \
 enPinsBUTTONS pin_left   = enPinsBUTTONS::PIN_LEFT,    unsigned long btn_left_debuonceMs  = DEBOUNCE_DEFAULT_MS, \
@@ -724,8 +723,6 @@ enPinsBUTTONS pin_right  = enPinsBUTTONS::PIN_RIGHT,   unsigned long btn_right_d
 class Dpad : public HidReportable
 {
   public:
-    const static cleaner_strategy::None noCleaning;
-
     constexpr Dpad(_DPAD_CTOR_PARAMS) noexcept : HidReportable(),
     m_btn_up(pin_up, btn_up_debuonceMs),       m_btn_down(pin_down, btn_down_debuonceMs),
     m_btn_left(pin_left, btn_left_debuonceMs), m_btn_right(pin_right, btn_right_debuonceMs),
@@ -756,8 +753,15 @@ class Dpad : public HidReportable
       bool right  = m_btn_right.btnIsPressed();
 
       // Clean states up according to cleaning strategy
-      m_cleaner->clean(up, down, left, right);
-      
+      if(m_cleaner)
+      {
+        m_cleaner->clean(up, down, left, right);
+      }
+      else
+      {
+        debugPrintf_SOCD("NO SOCD CLEANER FOUND!");
+      }
+
       // Fill report
       if(up && !right && !left) 
       {
@@ -813,7 +817,6 @@ class Dpad : public HidReportable
 
     }
 };
-const cleaner_strategy::None Dpad::noCleaning = {};
 
 #undef _DPAD_CTOR_PARAMS
 
@@ -1170,6 +1173,7 @@ constexpr _Gamepad<ARR> Gamepad(const ARR& buttons) noexcept
 namespace socd_strategies
 {
   using namespace cleaner_strategy;
+  static constexpr cleaner_strategy::None               none              = {};
   static constexpr cleaner_strategy::AllNeutral         allNeutral        = {};
   static constexpr cleaner_strategy::TournamentLegal    tournamentLegal   = {};
   static constexpr cleaner_strategy::LastInputPriority  lastInputPriority = {};
