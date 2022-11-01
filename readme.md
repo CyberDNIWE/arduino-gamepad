@@ -19,6 +19,11 @@ This fork is made primarily for [This not-so-slimbox 3d print project](https://w
    - **`AllNeutral`**: 
      - left + right = neutral
      - up + down = neutral
+   - **`LastInputPriority`**
+     - left + right = right
+     - right + left = left
+     - up + down = down
+     - down + up = up
    - **`None`**:
      - No cleaning
    - Possibility to **add your own** as  simple or as complex as you'd like!

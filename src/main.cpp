@@ -515,10 +515,7 @@ class ButtonBase : public HidReportable
 class Debouncer
 {
   public:
-    static constexpr bool PRESSED   = 1;
-    static constexpr bool UNPRESSED = 0;
-
-    constexpr Debouncer(unsigned long debounceTime) noexcept : m_debounceTime(debounceTime), m_pressTime(0UL), m_previous(Debouncer::UNPRESSED)
+    constexpr Debouncer(unsigned long debounceTime) noexcept : m_pressTime(0UL), m_debounceTime(debounceTime), m_previous(false)
     {}
 
     bool debounce(bool actuallyPressed) noexcept
@@ -568,10 +565,10 @@ class Debouncer
       return millis();
     }
 
-    
-    bool m_previous                     = Debouncer::UNPRESSED;
+
     unsigned long m_pressTime           = 0;
     const unsigned long m_debounceTime  = 0;
+    bool m_previous                     = false;
 };
 
 // Debounced button - just a regular ButtonBase that has its press debounced
@@ -589,7 +586,7 @@ class ButtonDebounced : public ButtonBase
     }
 
   protected:    
-    Debouncer m_debouncer;
+    mutable Debouncer m_debouncer;
 };
 
 // Base class for D-pad button (also debounced)
@@ -656,12 +653,12 @@ namespace cleaner_strategy
   
   struct LastInputPriority : public SOCD_CleaningStrategy
   {
-    bool m_prev_up     = false;
-    bool m_prev_down   = false;
-    bool m_prev_left   = false;
-    bool m_prev_right  = false;
+    mutable bool m_prev_up     = false;
+    mutable bool m_prev_down   = false;
+    mutable bool m_prev_left   = false;
+    mutable bool m_prev_right  = false;
     
-    inline void cleanCardinal(bool& dir1, bool& dir2, bool& prev_dir1, bool& prev_dir2) noexcept
+    inline void cleanCardinal(bool& dir1, bool& dir2, bool& prev_dir1, bool& prev_dir2) const noexcept
     {
       if(dir1 && dir2)
       {
@@ -682,10 +679,10 @@ namespace cleaner_strategy
       }
     }
 
-    virtual void clean(bool& up, bool& down, bool& left, bool& right) noexcept override
+    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept override
     {
       cleanCardinal(up,   down,   m_prev_up,  m_prev_down);
-      cleanCardinal(left, right, m_prev_left, m_prev_right);
+      cleanCardinal(left, right,  m_prev_left, m_prev_right);
 
       // Clean up/down
       // if(up && down)
