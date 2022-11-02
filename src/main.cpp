@@ -710,10 +710,14 @@ namespace cleaner_strategy
 
   };
   
+  constexpr unsigned long STRATEGY_SWITCHER_SWITCH_DELAY_SECONDS = 3UL;
   struct StrategySwitcher : public SOCD_CleaningStrategy
   {
-    constexpr StrategySwitcher(const SOCD_CleaningStrategy* const strategies, size_t size, const _inner::MyArray<ButtonBase>* combination) :
-     m_strategies(strategies), m_currentStrategy(strategies), m_switchCombination(combination), m_comboWasActivated(false), m_strategies_size(size)
+    public:
+
+    constexpr StrategySwitcher(const SOCD_CleaningStrategy* strategies, size_t size, const _inner::MyArray<ButtonBase>* combination, unsigned long nextPressTimeoutSecondsAmt = STRATEGY_SWITCHER_SWITCH_DELAY_SECONDS) :
+        m_strategies(strategies), m_currentStrategy(strategies), m_switchCombination(combination), m_currentIdx(0), m_strategies_size(size),
+        m_activeTimeoutAmt(nextPressTimeoutSecondsAmt * 1000), m_becomesActiveAt(0UL)
     {}
 
     virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept
@@ -724,41 +728,77 @@ namespace cleaner_strategy
         }
     }
 
-    // will return true if m_switchComination is empty or full of nullptrs :(
-    bool isComboCurrentlyPressed() const noexcept
+    void switchIfNeeded() const noexcept
+    {
+        const auto now = getTimeSinceStart();
+        if(m_becomesActiveAt <= now)
+        {
+            if(isComboCurrentlyPressed())
+            {
+                m_becomesActiveAt = now + m_activeTimeoutAmt;
+                switchToNextStrategy();
+            }
+        }
+    }
+
+    protected:
+    virtual unsigned long getTimeSinceStart() const noexcept
+    {
+      return millis();
+    }
+
+    private:
+        // will return true if m_switchComination is empty or full of nullptrs :(
+    inline bool isComboCurrentlyPressed() const noexcept
     {
         bool ret = true;
-        for(size_t i = 0; i < m_switchCombination->size; i++)
+        const auto combinationSize = m_switchCombination->size;
+        if(combinationSize)
         {
-            const auto* btn = m_switchCombination->data[i];
-            if(btn)
+            const auto** combinationData = m_switchCombination->data;
+
+            for(size_t i = 0; i < combinationSize; i++)
             {
-                bool pressed = btn->btnIsPressed();
-                if(ret && !pressed)
+                const auto* btn = combinationData[i];
+                if(btn)
                 {
-                    ret = false;
-                    break;
+                    if(ret && !btn->btnIsPressed())
+                    {
+                        ret = false;
+                        break;
+                    }
                 }
             }
         }
-
         return ret;
     }
     
-    void switchIfNeeded() const noexcept
+    inline void switchToNextStrategy() const noexcept
     {
+        size_t idx = m_currentIdx + 1;
         
+        if(idx >= m_strategies_size)
+        {
+            idx = 0;
+        }
+
+        if(idx < m_strategies_size)
+        {
+            m_currentStrategy = &m_strategies[idx];
+            m_currentIdx = idx;
+        }
     }
 
+    const   SOCD_CleaningStrategy*            m_strategies;
+    const   SOCD_CleaningStrategy mutable *   m_currentStrategy;
+    const   _inner::MyArray<ButtonBase>*      m_switchCombination;
 
-    const SOCD_CleaningStrategy* m_strategies;
-    const SOCD_CleaningStrategy* m_currentStrategy;
-    const _inner::MyArray<ButtonBase>* m_switchCombination;
-    bool m_comboWasActivated;
-    const size_t m_strategies_size;
-    
-
+    mutable size_t          m_currentIdx;
+    const   size_t          m_strategies_size;
+    const   unsigned long   m_activeTimeoutAmt;
+    mutable unsigned long   m_becomesActiveAt;
   };
+
 };
 
 
