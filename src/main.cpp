@@ -3,10 +3,6 @@
 // Debugging is a pain with no real step-through, so use these macroses to easily remove printouts from sources at will
 // Just coment out defines like DEBUG_PRINT_ENABLED to remove ALL printouts (suggested for final build)
 // Or each individual DEBUG_PRINT_XXXXX to remove specific ones. (useful for debugging)
-#include <Arduino.h>
-#include <avr_debugger.h>
-#include <avr8-stub.h>
-#include <app_api.h>
 
 #define BUILD_SIMULATOR_NOUSB
 #define DEBUG_PRINT_ENABLED BUILD_SIMULATOR_NOUSB
@@ -16,11 +12,10 @@
 //#define BEBUG_PRINT_DPAD 
 //#define DEBUG_PRINT_USB_REPORT 
 //#define DEBUG_PRINT_SOCD
-
 #ifndef BUILD_SIMULATOR_NOUSB
   #include <HID.h>
 #endif
-
+#include <Arduino.h>
 // Debug printout macros
 #define REMOVED_FROM_SOURCE ;
 #ifdef DEBUG_PRINT_ENABLED
@@ -70,8 +65,9 @@
 //     socd_strategies::tournamentLegal
 //     socd_strategies::allNeutral
 //     socd_strategies::lastInputPriority
-#define SOCD_STRATEGY_CYCLE_BUTTONS &PS, &Start
 #define SOCD_STRATEGY_SYCLE_DELAY 1
+#define SOCD_STRATEGY_CYCLE_BUTTONS &PS, &Start
+
 // You can now switch SOCD type in real-time using SOCD_STRATEGY_CYCLE_BUTTONS to do so.
 // Switching to next available SOCD method will only happen if all listed buttons are pressed
 // And will wait SOCD_STRATEGY_SYCLE_DELAY worth of seconds before switching to next one if not released by then
@@ -729,16 +725,15 @@ namespace cleaner_strategy
   {
     public:
 
-    constexpr StrategySwitcher(const SOCD_CleaningStrategy* strategies, size_t size, const _inner::MyArray<ButtonBase>* combination, unsigned long nextPressTimeoutSecondsAmt = SOCD_STRATEGY_SYCLE_DELAY) :
-        m_strategies(strategies), m_currentStrategy(strategies), m_switchCombination(combination), m_currentIdx(0), m_strategies_size(size),
+    constexpr StrategySwitcher(const SOCD_CleaningStrategy* const* strategies, size_t size, const _inner::MyArray<ButtonBase>* combination, unsigned long nextPressTimeoutSecondsAmt = SOCD_STRATEGY_SYCLE_DELAY) :
+        m_strategies(strategies), m_currentStrategy(strategies[0] ? strategies[0] : nullptr), 
+        m_switchCombination(combination), m_currentIdx(0), m_strategies_size(size),
         m_activeTimeoutAmt(nextPressTimeoutSecondsAmt * 1000UL), m_becomesActiveAt(0UL)
     {}
 
     virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept
     {
-        breakpoint();
         switchIfNeeded();
-        breakpoint();
         if(m_currentStrategy)
         {
             m_currentStrategy->clean(up, down, left, right);
@@ -747,14 +742,11 @@ namespace cleaner_strategy
 
     void switchIfNeeded() const noexcept
     {
-        breakpoint();
         const auto now = getTimeSinceStart();
         if(m_becomesActiveAt <= now)
         {
-            breakpoint();
-            if(true)
+            if(isComboCurrentlyPressed())
             {
-                breakpoint();
                 m_becomesActiveAt = now + m_activeTimeoutAmt;
                 switchToNextStrategy();
             }
@@ -768,22 +760,18 @@ namespace cleaner_strategy
     }
 
     private:
-        // will return true if m_switchComination is empty or full of nullptrs :(
-    bool isComboCurrentlyPressed() const noexcept
+    // will return true if m_switchComination full of nullptrs :(
+    inline bool isComboCurrentlyPressed() const noexcept
     {
-        bool ret = true;
-        const auto combinationSize = m_switchCombination->size;
-        if(combinationSize)
+        bool ret = bool(m_switchCombination);
+        if(ret)
         {
-            breakpoint();
-            const auto* combinationData = *(m_switchCombination->data);
-
-            for(size_t i = 0; i < combinationSize; i++)
+            if(m_switchCombination->size)
             {
-                const auto* btn = combinationData + i;
-                if(btn)
+                for(size_t i = 0; i < m_switchCombination->size; ++i)
                 {
-                    if(ret && !btn->btnIsPressed())
+                    const auto* btn = m_switchCombination->data[i];
+                    if(btn && !btn->btnIsPressed())
                     {
                         ret = false;
                         break;
@@ -794,7 +782,7 @@ namespace cleaner_strategy
         return ret;
     }
     
-    void switchToNextStrategy() const noexcept
+    inline void switchToNextStrategy() const noexcept
     {
         
         size_t idx = m_currentIdx + 1;
@@ -806,14 +794,13 @@ namespace cleaner_strategy
 
         if(idx < m_strategies_size)
         {
-            breakpoint();
-            m_currentStrategy = &m_strategies[idx];
+            m_currentStrategy = m_strategies[idx];
             m_currentIdx = idx;
         }
     }
 
-    const   SOCD_CleaningStrategy*            m_strategies;
-    const   SOCD_CleaningStrategy mutable *   m_currentStrategy;
+    const   SOCD_CleaningStrategy* const   *  m_strategies;
+    const   SOCD_CleaningStrategy  mutable *  m_currentStrategy;
     const   _inner::MyArray<ButtonBase>*      m_switchCombination;
 
     mutable size_t          m_currentIdx;
@@ -1343,7 +1330,7 @@ namespace buttons_storage
   // Make socd switcher that switches based on button combination given
   static const      ButtonBase* _switcher_buttons[] = { SOCD_STRATEGY_CYCLE_BUTTONS };
   static const      _inner::MyArray<ButtonBase> _socd_switcher_buttonCombination = { _switcher_buttons, _inner::array_size(_switcher_buttons) };
-  static constexpr  cleaner_strategy::StrategySwitcher socdSwitcher = { *socd_strategies::strategies, _inner::array_size(socd_strategies::strategies), &_socd_switcher_buttonCombination };
+  static constexpr  cleaner_strategy::StrategySwitcher socdSwitcher = { socd_strategies::strategies, _inner::array_size(socd_strategies::strategies), &_socd_switcher_buttonCombination };
   
   // Make d-pad with socd switcher
   static const auto dpad      = Dpad(&socdSwitcher);
@@ -1386,7 +1373,6 @@ static auto g_gamepad = Gamepad(all::buttons);
 // Now to actually put the thing together with arduino funtions
 void setup()
 {
-    debug_init();
   // Just created magic static HIDSubDescriptor and initialize g_gamepad
 #   ifndef BUILD_SIMULATOR_NOUSB
     static HIDSubDescriptor node(hidReportDescriptor, sizeof(hidReportDescriptor));
@@ -1403,6 +1389,5 @@ void setup()
 // In every loop just tell g_gamepad to poll everything.
 void loop()
 {
-    //breakpoint();
   g_gamepad.pollEverything();
 }
