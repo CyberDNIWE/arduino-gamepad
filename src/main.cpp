@@ -3,9 +3,13 @@
 // Debugging is a pain with no real step-through, so use these macroses to easily remove printouts from sources at will
 // Just coment out defines like DEBUG_PRINT_ENABLED to remove ALL printouts (suggested for final build)
 // Or each individual DEBUG_PRINT_XXXXX to remove specific ones. (useful for debugging)
+#include <Arduino.h>
+#include <avr_debugger.h>
+#include <avr8-stub.h>
+#include <app_api.h>
 
-//#define BUILD_SIMULATOR_NOUSB
-//#define DEBUG_PRINT_ENABLED BUILD_SIMULATOR_NOUSB
+#define BUILD_SIMULATOR_NOUSB
+#define DEBUG_PRINT_ENABLED BUILD_SIMULATOR_NOUSB
 //#define BEBUG_PRINT_BUTTONS 
 //#define DEBUG_PRINT_BUTTONS_RELEASED
 //#define BEBUG_PRINT_DEBOUNCE_STATE 
@@ -732,8 +736,9 @@ namespace cleaner_strategy
 
     virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept
     {
+        breakpoint();
         switchIfNeeded();
-
+        breakpoint();
         if(m_currentStrategy)
         {
             m_currentStrategy->clean(up, down, left, right);
@@ -742,11 +747,14 @@ namespace cleaner_strategy
 
     void switchIfNeeded() const noexcept
     {
+        breakpoint();
         const auto now = getTimeSinceStart();
         if(m_becomesActiveAt <= now)
         {
-            if(isComboCurrentlyPressed())
+            breakpoint();
+            if(true)
             {
+                breakpoint();
                 m_becomesActiveAt = now + m_activeTimeoutAmt;
                 switchToNextStrategy();
             }
@@ -761,17 +769,18 @@ namespace cleaner_strategy
 
     private:
         // will return true if m_switchComination is empty or full of nullptrs :(
-    inline bool isComboCurrentlyPressed() const noexcept
+    bool isComboCurrentlyPressed() const noexcept
     {
         bool ret = true;
         const auto combinationSize = m_switchCombination->size;
         if(combinationSize)
         {
-            const auto** combinationData = m_switchCombination->data;
+            breakpoint();
+            const auto* combinationData = *(m_switchCombination->data);
 
             for(size_t i = 0; i < combinationSize; i++)
             {
-                const auto* btn = combinationData[i];
+                const auto* btn = combinationData + i;
                 if(btn)
                 {
                     if(ret && !btn->btnIsPressed())
@@ -785,8 +794,9 @@ namespace cleaner_strategy
         return ret;
     }
     
-    inline void switchToNextStrategy() const noexcept
+    void switchToNextStrategy() const noexcept
     {
+        
         size_t idx = m_currentIdx + 1;
         
         if(idx >= m_strategies_size)
@@ -796,6 +806,7 @@ namespace cleaner_strategy
 
         if(idx < m_strategies_size)
         {
+            breakpoint();
             m_currentStrategy = &m_strategies[idx];
             m_currentIdx = idx;
         }
@@ -1372,10 +1383,10 @@ namespace all
 
 // Here is our Gamepad instance, that uses all buttons
 static auto g_gamepad = Gamepad(all::buttons);
-
 // Now to actually put the thing together with arduino funtions
 void setup()
 {
+    debug_init();
   // Just created magic static HIDSubDescriptor and initialize g_gamepad
 #   ifndef BUILD_SIMULATOR_NOUSB
     static HIDSubDescriptor node(hidReportDescriptor, sizeof(hidReportDescriptor));
@@ -1392,5 +1403,6 @@ void setup()
 // In every loop just tell g_gamepad to poll everything.
 void loop()
 {
+    //breakpoint();
   g_gamepad.pollEverything();
 }
