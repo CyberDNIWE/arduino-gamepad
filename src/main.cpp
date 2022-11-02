@@ -61,13 +61,32 @@
 # define debugPrintf_BUTTONS_RELEASED(str) REMOVED_FROM_SOURCE
 #endif
 
-// SOCD cleaning type. options are: 
+// SOCD cleaners are: (tournamentLegal being the default at start)
 //     socd_strategies::none
 //     socd_strategies::tournamentLegal
 //     socd_strategies::allNeutral
 //     socd_strategies::lastInputPriority
-#define SOCD_STRATEGY_TO_USE socd_strategies::tournamentLegal
+#define SOCD_STRATEGY_CYCLE_BUTTONS &PS, &Start
+#define SOCD_STRATEGY_SYCLE_DELAY 1
+// You can now switch SOCD type in real-time using SOCD_STRATEGY_CYCLE_BUTTONS to do so.
+// Switching to next available SOCD method will only happen if all listed buttons are pressed
+// And will wait SOCD_STRATEGY_SYCLE_DELAY worth of seconds before switching to next one if not released by then
+// The selected SOCD type is reset to default upon disconnecting.
 
+// To change SOCD_STRATEGY_CYCLE_BUTTONS you should list all the buttons needed to activate the switch (order independent)
+// divided by comma (,) with ampersant (&) before their name like so: &PS, &Start
+// Possible button names are:
+//  X
+//  Square  
+//  Sircle  
+//  Triangle
+//  L1      
+//  R1      
+//  L2      
+//  R2      
+//  Select  
+//  Start   
+//  PS      
 
 
 // Default debounce amount in ms
@@ -90,14 +109,6 @@
 #define DEBOUNCE_BUT_DPAD_DOWN      DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_DPAD_LEFT      DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_DPAD_RIGHT     DEBOUNCE_DEFAULT_MS
-
-
-// Leave these untouched
-#ifdef SOCD_STRATEGY_TO_USE
-# define SOCD_STRATEGY_TO_USE_ &SOCD_STRATEGY_TO_USE
-#else 
-# define SOCD_STRATEGY_TO_USE_ 
-#endif
 
 
 // I used an Arduino Pro Micro board, but it should work with any ATmega32U4-based board, just set the right pins below.
@@ -710,14 +721,13 @@ namespace cleaner_strategy
 
   };
   
-  constexpr unsigned long STRATEGY_SWITCHER_SWITCH_DELAY_SECONDS = 3UL;
   struct StrategySwitcher : public SOCD_CleaningStrategy
   {
     public:
 
-    constexpr StrategySwitcher(const SOCD_CleaningStrategy* strategies, size_t size, const _inner::MyArray<ButtonBase>* combination, unsigned long nextPressTimeoutSecondsAmt = STRATEGY_SWITCHER_SWITCH_DELAY_SECONDS) :
+    constexpr StrategySwitcher(const SOCD_CleaningStrategy* strategies, size_t size, const _inner::MyArray<ButtonBase>* combination, unsigned long nextPressTimeoutSecondsAmt = SOCD_STRATEGY_SYCLE_DELAY) :
         m_strategies(strategies), m_currentStrategy(strategies), m_switchCombination(combination), m_currentIdx(0), m_strategies_size(size),
-        m_activeTimeoutAmt(nextPressTimeoutSecondsAmt * 1000), m_becomesActiveAt(0UL)
+        m_activeTimeoutAmt(nextPressTimeoutSecondsAmt * 1000UL), m_becomesActiveAt(0UL)
     {}
 
     virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept
@@ -1283,20 +1293,22 @@ constexpr _Gamepad<ARR> Gamepad(const ARR& buttons) noexcept
 
 // At this point we're done with declarations/definitions and it's time to finally create some objects!
 
-// All SOCD strategies objects reside here, use SOCD_STRATEGY_TO_USE macro to select the one you like
+// All SOCD strategies objects reside here, use SOCD_STRATEGY_CYCLE_BUTTONS macro to select the one you like
+// Default is tournamentLegal
 namespace socd_strategies
 {
   using namespace cleaner_strategy;
-  static constexpr cleaner_strategy::None               none              = {};
-  static constexpr cleaner_strategy::AllNeutral         allNeutral        = {};
   static constexpr cleaner_strategy::TournamentLegal    tournamentLegal   = {};
+  static constexpr cleaner_strategy::AllNeutral         allNeutral        = {};
   static constexpr cleaner_strategy::LastInputPriority  lastInputPriority = {};
+  static constexpr cleaner_strategy::None               none              = {};
 
   static constexpr const cleaner_strategy::SOCD_CleaningStrategy* strategies[] = 
   {
-    &allNeutral,
     &tournamentLegal,
-    &lastInputPriority
+    &allNeutral,
+    &lastInputPriority,
+    &none
   };
 };
 
@@ -1318,7 +1330,7 @@ namespace buttons_storage
   static const auto PS        = Btn_PS();
 
   // Make socd switcher that switches based on button combination given
-  static const      ButtonBase* _switcher_buttons[] = { &buttons_storage::PS, &buttons_storage::Start };
+  static const      ButtonBase* _switcher_buttons[] = { SOCD_STRATEGY_CYCLE_BUTTONS };
   static const      _inner::MyArray<ButtonBase> _socd_switcher_buttonCombination = { _switcher_buttons, _inner::array_size(_switcher_buttons) };
   static constexpr  cleaner_strategy::StrategySwitcher socdSwitcher = { *socd_strategies::strategies, _inner::array_size(socd_strategies::strategies), &_socd_switcher_buttonCombination };
   
