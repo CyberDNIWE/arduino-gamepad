@@ -722,6 +722,8 @@ namespace cleaner_strategy
 
     virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept
     {
+        switchIfNeeded();
+
         if(m_currentStrategy)
         {
             m_currentStrategy->clean(up, down, left, right);
@@ -1314,7 +1316,14 @@ namespace buttons_storage
   static const auto Select    = Btn_SELECT();
   static const auto Start     = Btn_START();
   static const auto PS        = Btn_PS();
-  static const auto dpad      = Dpad(SOCD_STRATEGY_TO_USE_); // <---- change SOCD_STRATEGY_TO_USE (no underscore) definition to use different one
+
+  // Make socd switcher that switches based on button combination given
+  static const      ButtonBase* _switcher_buttons[] = { &buttons_storage::PS, &buttons_storage::Start };
+  static const      _inner::MyArray<ButtonBase> _socd_switcher_buttonCombination = { _switcher_buttons, _inner::array_size(_switcher_buttons) };
+  static constexpr  cleaner_strategy::StrategySwitcher socdSwitcher = { *socd_strategies::strategies, _inner::array_size(socd_strategies::strategies), &_socd_switcher_buttonCombination };
+  
+  // Make d-pad with socd switcher
+  static const auto dpad      = Dpad(&socdSwitcher);
 };
 
 // Here resides an array of all buttons as their HidReportable base
@@ -1347,16 +1356,7 @@ namespace all
   static constexpr _inner::MyArray<HidReportable> buttons = {_raw_array::_buttons, _inner::array_size(_raw_array::_buttons)};
 };
 
-// Make socd switcher that switches based on button combination given
-namespace socd_strategies
-{
-    using namespace buttons_storage;
 
-    static const ButtonBase* _switcher_buttons[] = { &buttons_storage::PS, &buttons_storage::Start };
-    static const _inner::MyArray<ButtonBase> socd_switcher_buttonCombination = {_switcher_buttons, _inner::array_size(_switcher_buttons)};
-
-    static constexpr cleaner_strategy::StrategySwitcher switcher = { *strategies, _inner::array_size(strategies), &socd_switcher_buttonCombination };
-};
 
 // Here is our Gamepad instance, that uses all buttons
 static auto g_gamepad = Gamepad(all::buttons);
