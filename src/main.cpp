@@ -12,11 +12,10 @@
 //#define BEBUG_PRINT_DPAD 
 //#define DEBUG_PRINT_USB_REPORT 
 //#define DEBUG_PRINT_SOCD
-
 #ifndef BUILD_SIMULATOR_NOUSB
   #include <HID.h>
 #endif
-
+#include <Arduino.h>
 // Debug printout macros
 #define REMOVED_FROM_SOURCE ;
 #ifdef DEBUG_PRINT_ENABLED
@@ -61,13 +60,33 @@
 # define debugPrintf_BUTTONS_RELEASED(str) REMOVED_FROM_SOURCE
 #endif
 
-// SOCD cleaning type. options are: 
+// SOCD cleaners are: (tournamentLegal being the default at start)
 //     socd_strategies::none
 //     socd_strategies::tournamentLegal
 //     socd_strategies::allNeutral
 //     socd_strategies::lastInputPriority
-#define SOCD_STRATEGY_TO_USE socd_strategies::tournamentLegal
+#define SOCD_STRATEGY_SYCLE_DELAY 1
+#define SOCD_STRATEGY_CYCLE_BUTTONS &PS, &Start
 
+// You can now switch SOCD type in real-time using SOCD_STRATEGY_CYCLE_BUTTONS to do so.
+// Switching to next available SOCD method will only happen if all listed buttons are pressed
+// And will wait SOCD_STRATEGY_SYCLE_DELAY worth of seconds before switching to next one if not released by then
+// The selected SOCD type is reset to default upon disconnecting.
+
+// To change SOCD_STRATEGY_CYCLE_BUTTONS you should list all the buttons needed to activate the switch (order independent)
+// divided by comma (,) with ampersant (&) before their name like so: &PS, &Start
+// Possible button names are:
+//  X
+//  Square  
+//  Sircle  
+//  Triangle
+//  L1      
+//  R1      
+//  L2      
+//  R2      
+//  Select  
+//  Start   
+//  PS      
 
 
 // Default debounce amount in ms
@@ -90,14 +109,6 @@
 #define DEBOUNCE_BUT_DPAD_DOWN      DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_DPAD_LEFT      DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_DPAD_RIGHT     DEBOUNCE_DEFAULT_MS
-
-
-// Leave these untouched
-#ifdef SOCD_STRATEGY_TO_USE
-# define SOCD_STRATEGY_TO_USE_ &SOCD_STRATEGY_TO_USE
-#else 
-# define SOCD_STRATEGY_TO_USE_ 
-#endif
 
 
 // I used an Arduino Pro Micro board, but it should work with any ATmega32U4-based board, just set the right pins below.
@@ -443,7 +454,7 @@ class iReportable
   public:
     constexpr iReportable() noexcept = default;
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept = 0;
+    virtual bool reportTo(hid_report_t& target) const noexcept = 0;
 };
 
 class iGatherableANDiReportable : public iGatherable, public iReportable
@@ -596,9 +607,12 @@ class Btn_Dpad : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
-    {}
+    virtual bool reportTo(hid_report_t& target) const noexcept 
+    {
+        return false;
+    }
 };
+
 
 // Simultanious Opposite Cardinal Directions (SOCD) cleaning strategies
 namespace cleaner_strategy
@@ -707,7 +721,94 @@ namespace cleaner_strategy
 
   };
   
-  //Todo: Composite strategy switcher
+  struct StrategySwitcher : public SOCD_CleaningStrategy
+  {
+    public:
+
+    constexpr StrategySwitcher(const SOCD_CleaningStrategy* const* strategies, size_t size, const _inner::MyArray<ButtonBase>* combination, unsigned long nextPressTimeoutSecondsAmt = SOCD_STRATEGY_SYCLE_DELAY) :
+        m_strategies(strategies), m_currentStrategy(strategies[0] ? strategies[0] : nullptr), 
+        m_switchCombination(combination), m_currentIdx(0), m_strategies_size(size),
+        m_activeTimeoutAmt(nextPressTimeoutSecondsAmt * 1000UL), m_becomesActiveAt(0UL)
+    {}
+
+    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept
+    {
+        switchIfNeeded();
+        if(m_currentStrategy)
+        {
+            m_currentStrategy->clean(up, down, left, right);
+        }
+    }
+
+    void switchIfNeeded() const noexcept
+    {
+        const auto now = getTimeSinceStart();
+        if(m_becomesActiveAt <= now)
+        {
+            if(isComboCurrentlyPressed())
+            {
+                m_becomesActiveAt = now + m_activeTimeoutAmt;
+                switchToNextStrategy();
+            }
+        }
+    }
+
+    protected:
+    virtual unsigned long getTimeSinceStart() const noexcept
+    {
+      return millis();
+    }
+
+    private:
+    // will return true if m_switchComination full of nullptrs :(
+    inline bool isComboCurrentlyPressed() const noexcept
+    {
+        bool ret = bool(m_switchCombination);
+        if(ret)
+        {
+            if(m_switchCombination->size)
+            {
+                for(size_t i = 0; i < m_switchCombination->size; ++i)
+                {
+                    const auto* btn = m_switchCombination->data[i];
+                    if(btn && !btn->btnIsPressed())
+                    {
+                        ret = false;
+                        break;
+                    }
+                }
+            }
+        }
+        return ret;
+    }
+    
+    inline void switchToNextStrategy() const noexcept
+    {
+        
+        size_t idx = m_currentIdx + 1;
+        
+        if(idx >= m_strategies_size)
+        {
+            idx = 0;
+        }
+
+        if(idx < m_strategies_size)
+        {
+            m_currentStrategy = m_strategies[idx];
+            m_currentIdx = idx;
+        }
+    }
+
+    const   SOCD_CleaningStrategy* const   *  m_strategies;
+    const   SOCD_CleaningStrategy  mutable *  m_currentStrategy;
+    const   _inner::MyArray<ButtonBase>*      m_switchCombination;
+
+    mutable size_t          m_currentIdx;
+    const   size_t          m_strategies_size;
+    const   unsigned long   m_activeTimeoutAmt;
+    mutable unsigned long   m_becomesActiveAt;
+  };
+
 };
 
 
@@ -744,7 +845,7 @@ class Dpad : public HidReportable
     Btn_Dpad m_btn_right;
     const cleaner_strategy::SOCD_CleaningStrategy*  m_cleaner;
   
-    virtual void reportTo(hid_report_t& target) const noexcept override
+    virtual bool reportTo(hid_report_t& target) const noexcept override
     {
       // Gather all button states (automatically debounces, no need to worry here)
       bool up     = m_btn_up.btnIsPressed();
@@ -757,10 +858,12 @@ class Dpad : public HidReportable
       {
         m_cleaner->clean(up, down, left, right);
       }
+      #ifdef DEBUG_PRINT_ENABLED
       else
       {
         debugPrintf_SOCD("NO SOCD CLEANER FOUND!");
       }
+      #endif
 
       // Fill report
       if(up && !right && !left) 
@@ -814,7 +917,8 @@ class Dpad : public HidReportable
       target.dpadLeftAxis  = left  ? 0xff : 0x00;
       target.dpadUpAxis    = up    ? 0xff : 0x00;
       target.dpadDownAxis  = down  ? 0xff : 0x00;
-
+      
+      return true;
     }
 };
 
@@ -830,7 +934,7 @@ class Btn_X : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_CROSS;
       auto& axis    = target.crossAxis;
@@ -845,7 +949,9 @@ class Btn_X : public ButtonDebounced
       {
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  X");
-      }      
+      }
+
+      return true;
     }
 };
 
@@ -856,7 +962,7 @@ class Btn_SQUARE : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_SQUARE;
       auto& axis    = target.squareAxis;
@@ -873,7 +979,7 @@ class Btn_SQUARE : public ButtonDebounced
         debugPrintf_BUTTONS_RELEASED("Button Released:  □");
       }
 
-      
+      return true;
     }
 };
 
@@ -884,7 +990,7 @@ class Btn_CIRCLE : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_CIRCLE;
       auto& axis    = target.circleAxis;
@@ -901,7 +1007,7 @@ class Btn_CIRCLE : public ButtonDebounced
         debugPrintf_BUTTONS_RELEASED("Button Released:  o");
       }
 
-      
+      return true;
     }
 };
 
@@ -912,7 +1018,7 @@ class Btn_TRIANGLE : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_TRIANGLE;
       auto& axis    = target.triangleAxis;
@@ -927,7 +1033,9 @@ class Btn_TRIANGLE : public ButtonDebounced
       {
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  △");
-      }    
+      }
+
+      return true;
     }
 };
 
@@ -938,7 +1046,7 @@ class Btn_L1 : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_L1;
       auto& axis    = target.L1Axis;
@@ -953,7 +1061,9 @@ class Btn_L1 : public ButtonDebounced
       {
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  L1");
-      }    
+      }
+
+      return true;
     }
 };
 
@@ -964,7 +1074,7 @@ class Btn_R1 : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_R1;
       auto& buttons = target.buttons;
@@ -979,7 +1089,9 @@ class Btn_R1 : public ButtonDebounced
       {
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  R1");
-      }    
+      }
+
+      return true;
     }
 };
 
@@ -990,7 +1102,7 @@ class Btn_L2 : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_L2;
       auto& buttons = target.buttons;
@@ -1005,7 +1117,9 @@ class Btn_L2 : public ButtonDebounced
       {
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  L2");
-      }    
+      }
+
+      return true;
     }
 };
 
@@ -1016,7 +1130,7 @@ class Btn_R2 : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_R2;
       auto& buttons = target.buttons;
@@ -1031,7 +1145,9 @@ class Btn_R2 : public ButtonDebounced
       {
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  R2");
-      }    
+      }
+      
+      return true;
     }
 };
 
@@ -1042,7 +1158,7 @@ class Btn_SELECT : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_SELECT;
       auto& buttons = target.buttons;
@@ -1056,7 +1172,9 @@ class Btn_SELECT : public ButtonDebounced
       {
         regButtonReleased(buttons, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  SELECT");
-      }    
+      }
+      
+      return true;
     }
 };
 
@@ -1067,7 +1185,7 @@ class Btn_START : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_START;
       auto& buttons = target.buttons;
@@ -1081,7 +1199,9 @@ class Btn_START : public ButtonDebounced
       {
         regButtonReleased(buttons, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  START");
-      }    
+      }
+
+      return true;
     }
 };
 
@@ -1092,7 +1212,7 @@ class Btn_PS : public ButtonDebounced
     {}
 
   protected:
-    virtual void reportTo(hid_report_t& target) const noexcept 
+    virtual bool reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_PS;
       auto& buttons = target.buttons;
@@ -1106,7 +1226,9 @@ class Btn_PS : public ButtonDebounced
       {
         regButtonReleased(buttons, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  [PS]");
-      }      
+      }
+
+      return true;
     }
 };
 
@@ -1169,15 +1291,26 @@ constexpr _Gamepad<ARR> Gamepad(const ARR& buttons) noexcept
 
 // At this point we're done with declarations/definitions and it's time to finally create some objects!
 
-// All SOCD strategies objects reside here, use SOCD_STRATEGY_TO_USE macro to select the one you like
+// All SOCD strategies objects reside here, use SOCD_STRATEGY_CYCLE_BUTTONS macro to select the one you like
+// Default is tournamentLegal
 namespace socd_strategies
 {
   using namespace cleaner_strategy;
-  static constexpr cleaner_strategy::None               none              = {};
-  static constexpr cleaner_strategy::AllNeutral         allNeutral        = {};
   static constexpr cleaner_strategy::TournamentLegal    tournamentLegal   = {};
+  static constexpr cleaner_strategy::AllNeutral         allNeutral        = {};
   static constexpr cleaner_strategy::LastInputPriority  lastInputPriority = {};
+  static constexpr cleaner_strategy::None               none              = {};
+
+  static constexpr const cleaner_strategy::SOCD_CleaningStrategy* strategies[] = 
+  {
+    &tournamentLegal,
+    &allNeutral,
+    &lastInputPriority,
+    &none
+  };
 };
+
+
 
 // All Buttons objects reside here
 namespace buttons_storage
@@ -1193,9 +1326,15 @@ namespace buttons_storage
   static const auto Select    = Btn_SELECT();
   static const auto Start     = Btn_START();
   static const auto PS        = Btn_PS();
-  static const auto dpad      = Dpad(SOCD_STRATEGY_TO_USE_); // <---- change SOCD_STRATEGY_TO_USE (no underscore) definition to use different one
-};
 
+  // Make socd switcher that switches based on button combination given
+  static const      ButtonBase* _switcher_buttons[] = { SOCD_STRATEGY_CYCLE_BUTTONS };
+  static const      _inner::MyArray<ButtonBase> _socd_switcher_buttonCombination = { _switcher_buttons, _inner::array_size(_switcher_buttons) };
+  static constexpr  cleaner_strategy::StrategySwitcher socdSwitcher = { socd_strategies::strategies, _inner::array_size(socd_strategies::strategies), &_socd_switcher_buttonCombination };
+  
+  // Make d-pad with socd switcher
+  static const auto dpad      = Dpad(&socdSwitcher);
+};
 
 // Here resides an array of all buttons as their HidReportable base
 // as well as some relevant stuff
@@ -1227,9 +1366,10 @@ namespace all
   static constexpr _inner::MyArray<HidReportable> buttons = {_raw_array::_buttons, _inner::array_size(_raw_array::_buttons)};
 };
 
+
+
 // Here is our Gamepad instance, that uses all buttons
 static auto g_gamepad = Gamepad(all::buttons);
-
 // Now to actually put the thing together with arduino funtions
 void setup()
 {

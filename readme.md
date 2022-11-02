@@ -29,7 +29,7 @@ This fork is made primarily for [This not-so-slimbox 3d print project](https://w
    - Possibility to **add your own** as  simple or as complex as you'd like!
 ## What is yet lacking
   - D-pad mode switch to make it act as left stick
-  - Switching of **S**.**O**.**C**.**D.** strategy on the fly
+  - ~~Switching of **S**.**O**.**C**.**D.** strategy on the fly~~
 
 ## Requirements
  - **ATmega32U4**- based board (mine was a [Arduino Pro Micro clone](https://www.makershop.de/plattformen/arduino/pro-micro-32u4/))
@@ -42,15 +42,14 @@ This fork is made primarily for [This not-so-slimbox 3d print project](https://w
    - Open directory using Platform.io plugin and flash
 > Should compile in about 2 seconds with no errors
 ## SOCD type selection
- - By default is **`TournamentLegal`**
- - To change it navigate to line **`69`** that says **`#define SOCD_STRATEGY_TO_USE socd_strategies::tournamentLegal`** and change the **`socd_strategies::tournamentLegal`** to the desired one of:
-   - **`socd_strategies::none`**
-   - **`socd_strategies::tournamentLegal`**
-   - **`socd_strategies::allNeutral`**
-   - **`socd_strategies::lastInputPriority`**
-
-_notice: no capital letter at the beginning of strategy name, netiher `;` at the end of line_
-   
+ - By default is **`TournamentLegal`** (resets on every reconnection)
+ - To cycle between types press buttons defined by **`SOCD_STRATEGY_CYCLE_BUTTONS`**
+   - **`PS`** + **`Start`** by default
+   - Order of key presses doesn't matter
+ - To change button combination for SOCD type cycling:
+   - Navigate to line **`69`** that says **`#define SOCD_STRATEGY_CYCLE_BUTTONS &PS, &Start`**
+   - List the buttons you'd like instead in similar fasion (see comment in code for more info)
+     - Example new line **`69`**: **`#define SOCD_STRATEGY_CYCLE_BUTTONS &Select, &Start`**
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
