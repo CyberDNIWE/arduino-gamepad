@@ -710,7 +710,55 @@ namespace cleaner_strategy
 
   };
   
-  //Todo: Composite strategy switcher
+  struct StrategySwitcher : public SOCD_CleaningStrategy
+  {
+    constexpr StrategySwitcher(const SOCD_CleaningStrategy* const strategies, size_t size, const _inner::MyArray<ButtonBase>* combination) :
+     m_strategies(strategies), m_currentStrategy(strategies), m_switchCombination(combination), m_comboWasActivated(false), m_strategies_size(size)
+    {}
+
+    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept
+    {
+        if(m_currentStrategy)
+        {
+            m_currentStrategy->clean(up, down, left, right);
+        }
+    }
+
+    // will return true if m_switchComination is empty or full of nullptrs :(
+    bool isComboCurrentlyPressed() const noexcept
+    {
+        bool ret = true;
+        for(size_t i = 0; i < m_switchCombination->size; i++)
+        {
+            const auto* btn = m_switchCombination->data[i];
+            if(btn)
+            {
+                bool pressed = btn->btnIsPressed();
+                if(ret && !pressed)
+                {
+                    ret = false;
+                    break;
+                }
+            }
+        }
+
+        return ret;
+    }
+    
+    void switchIfNeeded() const noexcept
+    {
+        
+    }
+
+
+    const SOCD_CleaningStrategy* m_strategies;
+    const SOCD_CleaningStrategy* m_currentStrategy;
+    const _inner::MyArray<ButtonBase>* m_switchCombination;
+    bool m_comboWasActivated;
+    const size_t m_strategies_size;
+    
+
+  };
 };
 
 
@@ -1201,7 +1249,16 @@ namespace socd_strategies
   static constexpr cleaner_strategy::AllNeutral         allNeutral        = {};
   static constexpr cleaner_strategy::TournamentLegal    tournamentLegal   = {};
   static constexpr cleaner_strategy::LastInputPriority  lastInputPriority = {};
+
+  static constexpr const cleaner_strategy::SOCD_CleaningStrategy* strategies[] = 
+  {
+    &allNeutral,
+    &tournamentLegal,
+    &lastInputPriority
+  };
 };
+
+
 
 // All Buttons objects reside here
 namespace buttons_storage
@@ -1219,7 +1276,6 @@ namespace buttons_storage
   static const auto PS        = Btn_PS();
   static const auto dpad      = Dpad(SOCD_STRATEGY_TO_USE_); // <---- change SOCD_STRATEGY_TO_USE (no underscore) definition to use different one
 };
-
 
 // Here resides an array of all buttons as their HidReportable base
 // as well as some relevant stuff
@@ -1249,6 +1305,17 @@ namespace all
 
   // Just use this buttons array for initialization
   static constexpr _inner::MyArray<HidReportable> buttons = {_raw_array::_buttons, _inner::array_size(_raw_array::_buttons)};
+};
+
+// Make socd switcher that switches based on button combination given
+namespace socd_strategies
+{
+    using namespace buttons_storage;
+
+    static const ButtonBase* _switcher_buttons[] = { &buttons_storage::PS, &buttons_storage::Start };
+    static const _inner::MyArray<ButtonBase> socd_switcher_buttonCombination = {_switcher_buttons, _inner::array_size(_switcher_buttons)};
+
+    static constexpr cleaner_strategy::StrategySwitcher switcher = { *strategies, _inner::array_size(strategies), &socd_switcher_buttonCombination };
 };
 
 // Here is our Gamepad instance, that uses all buttons
