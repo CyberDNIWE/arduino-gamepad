@@ -567,18 +567,25 @@ class Btn_Dpad : public ButtonDebounced
     { /* does not report directly */ }
 };
 
+struct DirectionBF
+{
+	bool up     : 1;
+	bool down   : 1;
+	bool left   : 1;
+	bool right  : 1;
+};
 
 // Simultanious Opposite Cardinal Directions (SOCD) cleaning strategies
 namespace cleaner_strategy
 {
   struct SOCD_CleaningStrategy
   {
-    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept = 0;
+    virtual void clean(DirectionBF& directions) const noexcept = 0;
   };
 
   struct None : public SOCD_CleaningStrategy
   {
-    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept 
+    virtual void clean(DirectionBF& directions) const noexcept 
     {
       debugPrintf_SOCD("NO SOCD APPLIED!");
     };
@@ -586,16 +593,17 @@ namespace cleaner_strategy
 
   struct TournamentLegal : public SOCD_CleaningStrategy
   {
-    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept override
+    virtual void clean(DirectionBF& directions) const noexcept override
     {
-      if(up && down)
+      if(directions.up && directions.down)
       {        
-        down = false;
+        directions.down = false;
         debugPrintf_SOCD("Tournament legal SOCD: UP + DOWN = UP");
       }
-      if(left && right)
+      if(directions.left && directions.right)
       {        
-        left = right = false;
+        directions.left  = false;
+        directions.right = false;
         debugPrintf_SOCD("Tournament legal SOCD: LEFT + RIGHT = NEUTRAL");
       }
     }
@@ -603,16 +611,18 @@ namespace cleaner_strategy
 
   struct AllNeutral : public SOCD_CleaningStrategy
   {
-    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept override
+    virtual void clean(DirectionBF& directions) const noexcept override
     {      
-      if(up && down)
+      if(directions.up && directions.down)
       {        
-        up = down = false;
+        directions.up = false;
+        directions.down = false;
         debugPrintf_SOCD("All neutral SOCD: UP + DOWN = NEUTRAL");
       }
-      if(left && right)
+      if(directions.left && directions.right)
       {        
-        left = right = false;
+        directions.left = false;
+        directions.right = false;
         debugPrintf_SOCD("All neutral SOCD: LEFT + RIGHT = NEUTRAL");
       }
     }
@@ -620,59 +630,60 @@ namespace cleaner_strategy
   
   struct LastInputPriority : public SOCD_CleaningStrategy
   {
-    mutable bool m_prev_up     = false;
-    mutable bool m_prev_down   = false;
-    mutable bool m_prev_left   = false;
-    mutable bool m_prev_right  = false;
-    
-    inline void cleanCardinal(bool& dir1, bool& dir2, bool& prev_dir1, bool& prev_dir2) const noexcept
+    mutable DirectionBF m_prevs = { false, false, false, false };
+
+    virtual void clean(DirectionBF& directions) const noexcept override
     {
-      if(dir1 && dir2)
+      cleanCardinal_Vertical(directions);
+      cleanCardinal_Horizontal(directions);
+    }
+
+    inline void cleanCardinal_Horizontal(DirectionBF& directions) const noexcept
+    {
+      // Clean left/right
+      if(directions.left && directions.right)
       {
-        if(dir1 && prev_dir2)
+        if(directions.left && m_prevs.right)
         {
-          dir2 = false;
+          debugPrintf_SOCD("LastInputPriority SOCD: RIGHT + LEFT = LEFT");
+          directions.right = false;
         }
 
-        if(dir2 && prev_dir1)
+        if(directions.right && m_prevs.left)
         {
-          dir1 = false;
+          debugPrintf_SOCD("LastInputPriority SOCD: LEFT + RIGHT = RIGHT");
+          directions.left = false;
         }
       }
       else
       {
-        prev_dir1   = dir1;
-        prev_dir2   = dir2;
+        m_prevs.left   = directions.left;
+        m_prevs.right  = directions.right;
       }
     }
-
-    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept override
+    inline void cleanCardinal_Vertical(DirectionBF& directions)   const noexcept
     {
-      cleanCardinal(up,   down,   m_prev_up,  m_prev_down);
-      cleanCardinal(left, right,  m_prev_left, m_prev_right);
+      //Clean up/down
+      if(directions.up && directions.down)
+      {
+        if(directions.up && m_prevs.down)
+        {
+          debugPrintf_SOCD("LastInputPriority SOCD: DOWN + UP = UP");
+          directions.down = false;
+        }
 
-      // Clean up/down
-      // if(up && down)
-      // {
-      //   if(up && m_prev_down)
-      //   {
-      //     debugPrintf_SOCD("LastInputPriority SOCD: DOWN + UP = UP");
-      //     down = false;
-      //   }
-
-      //   if(down && m_prev_up)
-      //   {
-      //     debugPrintf_SOCD("LastInputPriority SOCD: UP + DOWN = DOWN");
-      //     up = false;
-      //   }
-      // }
-      // else
-      // {
-      //   m_prev_up   = up;
-      //   m_prev_down = down;
-      // }
+        if(directions.down && m_prevs.up)
+        {
+          debugPrintf_SOCD("LastInputPriority SOCD: UP + DOWN = DOWN");
+          directions.up = false;
+        }
+      }
+      else
+      {
+        m_prevs.up   = directions.up;
+        m_prevs.down = directions.down;
+      }
     }
-
   };
   
   struct StrategySwitcher : public SOCD_CleaningStrategy
@@ -685,12 +696,12 @@ namespace cleaner_strategy
         m_activeTimeoutAmt(nextPressTimeoutSecondsAmt * 1000UL), m_becomesActiveAt(0UL)
     {}
 
-    virtual void clean(bool& up, bool& down, bool& left, bool& right) const noexcept
+    virtual void clean(DirectionBF& directions) const noexcept
     {
         switchIfNeeded();
         if(m_currentStrategy)
         {
-            m_currentStrategy->clean(up, down, left, right);
+            m_currentStrategy->clean(directions);
         }
     }
 
@@ -802,15 +813,18 @@ class Dpad : public HidReportable
     virtual void reportTo(hid_report_t& target) const noexcept override
     {
       // Gather all button states (automatically debounces, no need to worry here)
-      bool up     = m_btn_up.btnIsPressed();
-      bool down   = m_btn_down.btnIsPressed();
-      bool left   = m_btn_left.btnIsPressed();
-      bool right  = m_btn_right.btnIsPressed();
+      DirectionBF directions = 
+      {
+        m_btn_up.btnIsPressed(),
+        m_btn_down.btnIsPressed(),
+        m_btn_left.btnIsPressed(),
+        m_btn_right.btnIsPressed()
+      };
 
       // Clean states up according to cleaning strategy
       if(m_cleaner)
       {
-        m_cleaner->clean(up, down, left, right);
+        m_cleaner->clean(directions);
       }
       #ifdef DEBUG_PRINT_ENABLED
       else
@@ -820,42 +834,42 @@ class Dpad : public HidReportable
       #endif
 
       // Fill report
-      if(up && !right && !left) 
+      if(directions.up && !directions.right && !directions.left) 
       {
         target.dpadHat = 0;
         debugPrintf_DPAD("Pressed d-pad: ↑");
       }
-      else if(up && right)
+      else if(directions.up && directions.right)
       {
         target.dpadHat = 1;
         debugPrintf_DPAD("Pressed d-pad: ↗");
       }
-      else if(right && !up && !down)
+      else if(directions.right && !directions.up && !directions.down)
       {        
         target.dpadHat = 2;
         debugPrintf_DPAD("Pressed d-pad: →");
       }
-      else if(right && down)
+      else if(directions.right && directions.down)
       {
         target.dpadHat = 3;
         debugPrintf_DPAD("Pressed d-pad: ↘");
       }
-      else if(down && !right && !left)
+      else if(directions.down && !directions.right && !directions.left)
       {
         target.dpadHat = 4;
         debugPrintf_DPAD("Pressed d-pad: ↓");
       }
-      else if(down && left)
+      else if(directions.down && directions.left)
       {
         target.dpadHat = 5;
         debugPrintf_DPAD("Pressed d-pad: ↙");
       }
-      else if(left && !down && !up)
+      else if(directions.left && !directions.down && !directions.up)
       {
         target.dpadHat = 6;
         debugPrintf_DPAD("Pressed d-pad: ←");
       }
-      else if(left && up)
+      else if(directions.left && directions.up)
       {
         target.dpadHat = 7;
         debugPrintf_DPAD("Pressed d-pad: ↖");
@@ -867,10 +881,10 @@ class Dpad : public HidReportable
       }
 
       // Not sure if needed, but original had these so might as well
-      target.dpadRightAxis = right ? 0xff : 0x00;
-      target.dpadLeftAxis  = left  ? 0xff : 0x00;
-      target.dpadUpAxis    = up    ? 0xff : 0x00;
-      target.dpadDownAxis  = down  ? 0xff : 0x00;
+      target.dpadRightAxis = directions.right ? 0xff : 0x00;
+      target.dpadLeftAxis  = directions.left  ? 0xff : 0x00;
+      target.dpadUpAxis    = directions.up    ? 0xff : 0x00;
+      target.dpadDownAxis  = directions.down  ? 0xff : 0x00;
     }
 };
 
