@@ -441,60 +441,16 @@ namespace _inner
   constexpr size_t array_size(const T(&)[N]) noexcept { return N; }
 };
 
-// Intefaces for our Button classes to inherit from
-class iGatherable
-{
-  public:
-    constexpr iGatherable() noexcept = default;
-    virtual void gather(hid_report_t& target) const noexcept = 0;  
-};
-
-class iReportable
-{
-  public:
-    constexpr iReportable() noexcept = default;
-  protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept = 0;
-};
-
-class iGatherableANDiReportable : public iGatherable, public iReportable
-{
-  public:
-    constexpr iGatherableANDiReportable() = default;
-};
-
-class iInitable
-{
-  public:
-    constexpr iInitable() = default;
-    
-    virtual void init() const noexcept = 0; // const-init will make sense later ;)
-};
-
-class HidReportable : public iGatherableANDiReportable, public iInitable
+class HidReportable
 {
   public:
     constexpr HidReportable() noexcept = default;
-    constexpr HidReportable(bool updates) noexcept : m_updateIsNeeded(updates)
-    {}
-
     virtual ~HidReportable() = default;
-
-    virtual void gather(hid_report_t& target) const noexcept override
-    {
-      if(updateIsNeeded())
-      {
-        reportTo(target);
-      }
-    }
-
-    virtual bool updateIsNeeded() const noexcept 
-    {
-      return m_updateIsNeeded;
-    };
+    
+    virtual void init() const noexcept = 0; // const-init will make sense later ;)
+    virtual void reportTo(hid_report_t& target) const noexcept = 0;
 
   protected:
-    bool m_updateIsNeeded = true; 
 };
 
 // Base class for Buttons, unfourtunately no RAII - pins need setting up after creation
@@ -607,10 +563,8 @@ class Btn_Dpad : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
-    {
-        return false;
-    }
+    virtual void reportTo(hid_report_t& target) const noexcept 
+    { /* does not report directly */ }
 };
 
 
@@ -824,7 +778,7 @@ enPinsBUTTONS pin_right  = enPinsBUTTONS::PIN_RIGHT,   unsigned long btn_right_d
 class Dpad : public HidReportable
 {
   public:
-    constexpr Dpad(_DPAD_CTOR_PARAMS) noexcept : HidReportable(),
+    constexpr Dpad(_DPAD_CTOR_PARAMS) noexcept :
     m_btn_up(pin_up, btn_up_debuonceMs),       m_btn_down(pin_down, btn_down_debuonceMs),
     m_btn_left(pin_left, btn_left_debuonceMs), m_btn_right(pin_right, btn_right_debuonceMs),
     m_cleaner(cleaner)
@@ -845,7 +799,7 @@ class Dpad : public HidReportable
     Btn_Dpad m_btn_right;
     const cleaner_strategy::SOCD_CleaningStrategy*  m_cleaner;
   
-    virtual bool reportTo(hid_report_t& target) const noexcept override
+    virtual void reportTo(hid_report_t& target) const noexcept override
     {
       // Gather all button states (automatically debounces, no need to worry here)
       bool up     = m_btn_up.btnIsPressed();
@@ -917,8 +871,6 @@ class Dpad : public HidReportable
       target.dpadLeftAxis  = left  ? 0xff : 0x00;
       target.dpadUpAxis    = up    ? 0xff : 0x00;
       target.dpadDownAxis  = down  ? 0xff : 0x00;
-      
-      return true;
     }
 };
 
@@ -934,7 +886,7 @@ class Btn_X : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_CROSS;
       auto& axis    = target.crossAxis;
@@ -950,8 +902,6 @@ class Btn_X : public ButtonDebounced
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  X");
       }
-
-      return true;
     }
 };
 
@@ -962,7 +912,7 @@ class Btn_SQUARE : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_SQUARE;
       auto& axis    = target.squareAxis;
@@ -978,8 +928,6 @@ class Btn_SQUARE : public ButtonDebounced
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  □");
       }
-
-      return true;
     }
 };
 
@@ -990,7 +938,7 @@ class Btn_CIRCLE : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_CIRCLE;
       auto& axis    = target.circleAxis;
@@ -1006,8 +954,6 @@ class Btn_CIRCLE : public ButtonDebounced
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  o");
       }
-
-      return true;
     }
 };
 
@@ -1018,7 +964,7 @@ class Btn_TRIANGLE : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_TRIANGLE;
       auto& axis    = target.triangleAxis;
@@ -1034,8 +980,6 @@ class Btn_TRIANGLE : public ButtonDebounced
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  △");
       }
-
-      return true;
     }
 };
 
@@ -1046,7 +990,7 @@ class Btn_L1 : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_L1;
       auto& axis    = target.L1Axis;
@@ -1062,8 +1006,6 @@ class Btn_L1 : public ButtonDebounced
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  L1");
       }
-
-      return true;
     }
 };
 
@@ -1074,7 +1016,7 @@ class Btn_R1 : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_R1;
       auto& buttons = target.buttons;
@@ -1090,8 +1032,6 @@ class Btn_R1 : public ButtonDebounced
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  R1");
       }
-
-      return true;
     }
 };
 
@@ -1102,7 +1042,7 @@ class Btn_L2 : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_L2;
       auto& buttons = target.buttons;
@@ -1118,8 +1058,6 @@ class Btn_L2 : public ButtonDebounced
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  L2");
       }
-
-      return true;
     }
 };
 
@@ -1130,7 +1068,7 @@ class Btn_R2 : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_R2;
       auto& buttons = target.buttons;
@@ -1146,8 +1084,6 @@ class Btn_R2 : public ButtonDebounced
         regButtonReleased(buttons, axis, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  R2");
       }
-      
-      return true;
     }
 };
 
@@ -1158,7 +1094,7 @@ class Btn_SELECT : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_SELECT;
       auto& buttons = target.buttons;
@@ -1173,8 +1109,6 @@ class Btn_SELECT : public ButtonDebounced
         regButtonReleased(buttons, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  SELECT");
       }
-      
-      return true;
     }
 };
 
@@ -1185,7 +1119,7 @@ class Btn_START : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_START;
       auto& buttons = target.buttons;
@@ -1200,8 +1134,6 @@ class Btn_START : public ButtonDebounced
         regButtonReleased(buttons, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  START");
       }
-
-      return true;
     }
 };
 
@@ -1212,7 +1144,7 @@ class Btn_PS : public ButtonDebounced
     {}
 
   protected:
-    virtual bool reportTo(hid_report_t& target) const noexcept 
+    virtual void reportTo(hid_report_t& target) const noexcept 
     {
       constexpr auto mask = bfButtonHID::HID_PS;
       auto& buttons = target.buttons;
@@ -1227,8 +1159,6 @@ class Btn_PS : public ButtonDebounced
         regButtonReleased(buttons, mask);
         debugPrintf_BUTTONS_RELEASED("Button Released:  [PS]");
       }
-
-      return true;
     }
 };
 
@@ -1255,7 +1185,7 @@ struct Root
     {
       for(size_t i = 0; i < m_arr.size; ++i)
       {
-        m_arr.data[i]->gather(target);
+        m_arr.data[i]->reportTo(target);
       }
     }
 
