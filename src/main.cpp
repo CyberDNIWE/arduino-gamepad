@@ -282,11 +282,11 @@ struct hid_report_t
   uint16_t gyroscopeAxis; // 10 bits
 };
 
-bool operator!=(const hid_report_t& lhs, const hid_report_t& rhs) noexcept
+inline bool operator!=(const hid_report_t& lhs, const hid_report_t& rhs) noexcept
 {
   return memcmp(&lhs, &rhs, sizeof(rhs));
 }
-bool operator==(const hid_report_t& lhs, const hid_report_t& rhs) noexcept
+inline bool operator==(const hid_report_t& lhs, const hid_report_t& rhs) noexcept
 {
   return !(lhs != rhs);
 }
@@ -686,13 +686,14 @@ namespace cleaner_strategy
     }
   };
   
+  template<typename CMB_CHKR>
   struct StrategySwitcher : public SOCD_CleaningStrategy
   {
     public:
 
-    constexpr StrategySwitcher(const SOCD_CleaningStrategy* const* strategies, size_t size, const _inner::MyArray<ButtonBase>* combination, unsigned long nextPressTimeoutSecondsAmt = SOCD_STRATEGY_SYCLE_DELAY) :
+    constexpr StrategySwitcher(const SOCD_CleaningStrategy* const* strategies, size_t size, const CMB_CHKR& combination, unsigned long nextPressTimeoutSecondsAmt = SOCD_STRATEGY_SYCLE_DELAY) :
         m_strategies(strategies), m_currentStrategy(strategies[0] ? strategies[0] : nullptr), 
-        m_switchCombination(combination), m_currentIdx(0), m_strategies_size(size),
+        m_isComboCurrentlyPressed(combination), m_currentIdx(0), m_strategies_size(size),
         m_activeTimeoutAmt(nextPressTimeoutSecondsAmt * 1000UL), m_becomesActiveAt(0UL)
     {}
 
@@ -710,7 +711,7 @@ namespace cleaner_strategy
         const auto now = getTimeSinceStart();
         if(m_becomesActiveAt <= now)
         {
-            if(isComboCurrentlyPressed())
+            if(m_isComboCurrentlyPressed())
             {
                 m_becomesActiveAt = now + m_activeTimeoutAmt;
                 switchToNextStrategy();
@@ -725,27 +726,6 @@ namespace cleaner_strategy
     }
 
     private:
-    // will return true if m_switchComination full of nullptrs :(
-    inline bool isComboCurrentlyPressed() const noexcept
-    {
-        bool ret = bool(m_switchCombination);
-        if(ret)
-        {
-            if(m_switchCombination->size)
-            {
-                for(size_t i = 0; i < m_switchCombination->size; ++i)
-                {
-                    const auto* btn = m_switchCombination->data[i];
-                    if(btn && !btn->btnIsPressed())
-                    {
-                        ret = false;
-                        break;
-                    }
-                }
-            }
-        }
-        return ret;
-    }
     
     inline void switchToNextStrategy() const noexcept
     {
@@ -766,7 +746,7 @@ namespace cleaner_strategy
 
     const   SOCD_CleaningStrategy* const   *  m_strategies;
     const   SOCD_CleaningStrategy  mutable *  m_currentStrategy;
-    const   _inner::MyArray<ButtonBase>*      m_switchCombination;
+    const   CMB_CHKR&  m_isComboCurrentlyPressed;
 
     mutable size_t          m_currentIdx;
     const   size_t          m_strategies_size;
@@ -1273,8 +1253,30 @@ namespace buttons_storage
 
   // Make socd switcher that switches based on button combination given
   static const      ButtonBase* _switcher_buttons[] = { SOCD_STRATEGY_CYCLE_BUTTONS };
-  static const      _inner::MyArray<ButtonBase> _socd_switcher_buttonCombination = { _switcher_buttons, _inner::array_size(_switcher_buttons) };
-  static constexpr  cleaner_strategy::StrategySwitcher socdSwitcher = { socd_strategies::strategies, _inner::array_size(socd_strategies::strategies), &_socd_switcher_buttonCombination };
+  constexpr size_t _switcher_buttons_size = _inner::array_size(_switcher_buttons);
+  static const      auto  comboChecker = +[]()
+  {
+    bool ret = _switcher_buttons_size;
+    if(ret)
+    {
+        for(size_t i = 0; i < _switcher_buttons_size; ++i)
+        {
+            const auto* btn =_switcher_buttons[i];
+            if(btn && !btn->btnIsPressed())
+            {
+                ret = false;
+                break;
+            }
+        }
+    }
+    return ret;
+  };
+
+  static constexpr  cleaner_strategy::StrategySwitcher<decltype(comboChecker)> socdSwitcher = 
+  { 
+    socd_strategies::strategies, _inner::array_size(socd_strategies::strategies), 
+    comboChecker
+  };
   
   // Make d-pad with socd switcher
   static const auto dpad      = Dpad(&socdSwitcher);
