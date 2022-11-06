@@ -8,6 +8,9 @@ This fork is made primarily for [This not-so-slimbox 3d print project](https://w
 
 
 ## Why this one instead of [jfedor2's](https://github.com/jfedor2/gamepad/)?
+ - Blazing fast!
+   - On `Arduino Pro Micro 8Mhz @3.3V` entire update loop takes only **`230 μs`** ie **`0.230 ms`**.
+   - _Note: you will most likely be bottlenecked by USB update rate (max. 1000 updates a second, ie fastest update time possible is **`1ms`**)_
  - **OOP** style: reliable and trivial to extend
    - Like the functionality but not the imlementation? Just inherit and override!
  - **Per-button debouncing** with possibility for **per-button custom timings**
