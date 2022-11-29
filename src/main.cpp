@@ -104,6 +104,9 @@
 #define DEBOUNCE_BUT_SELECT         DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_START          DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_PS             DEBOUNCE_DEFAULT_MS
+#define DEBOUNCE_BUT_L3             DEBOUNCE_DEFAULT_MS
+#define DEBOUNCE_BUT_R3             DEBOUNCE_DEFAULT_MS
+
 // Same for D-pad
 #define DEBOUNCE_BUT_DPAD_UP        DEBOUNCE_DEFAULT_MS
 #define DEBOUNCE_BUT_DPAD_DOWN      DEBOUNCE_DEFAULT_MS
@@ -137,7 +140,8 @@ namespace board_config
     PIN_R2        = 15,
     PIN_SELECT    = 18, // A0
     PIN_START     = 19, // A1
-    PIN_PS        = 20  // A2
+    PIN_PS        = 20, // A2
+    PIN_L3        = 21  // A3
     //*/
 
     // For UNO (this is mostly for wokwi emulator debuging, UNO has no USBHID compatibility):    
@@ -1156,6 +1160,30 @@ class Btn_PS : public ButtonDebounced
     }
 };
 
+class Btn_L3 : public ButtonDebounced
+{
+  public:
+    constexpr Btn_L3(enPinsBUTTONS pin = enPinsBUTTONS::PIN_L3, unsigned long debounceMs = DEBOUNCE_BUT_L3) noexcept : ButtonDebounced(pin, debounceMs)
+    {}
+
+  protected:
+    virtual void reportTo(hid_report_t& target) const noexcept 
+    {
+      constexpr auto mask = bfButtonHID::HID_L3;
+      auto& buttons = target.buttons;
+      if(btnIsPressed())
+      {
+        regButtonPressed(buttons, mask);
+        debugPrintf_BUTTONS("Button Pressed:  [L3]");
+      }
+      else
+      {
+        regButtonReleased(buttons, mask);
+        debugPrintf_BUTTONS_RELEASED("Button Released:  [L3]");
+      }
+    }
+};
+
 //==========================================//
 
 
@@ -1250,6 +1278,7 @@ namespace buttons_storage
   static const auto Select    = Btn_SELECT();
   static const auto Start     = Btn_START();
   static const auto PS        = Btn_PS();
+  static const auto L3        = Btn_L3();
 
   // Make socd switcher that switches based on button combination given
   static const      ButtonBase* _switcher_buttons[] = { SOCD_STRATEGY_CYCLE_BUTTONS };
@@ -1261,7 +1290,7 @@ namespace buttons_storage
     {
         for(size_t i = 0; i < _switcher_buttons_size; ++i)
         {
-            const auto* btn =_switcher_buttons[i];
+            const auto* const btn =_switcher_buttons[i];
             if(btn && !btn->btnIsPressed())
             {
                 ret = false;
@@ -1304,6 +1333,7 @@ namespace all
       &Select,
       &Start,
       &PS,
+      &L3,
       &dpad
     };
   };
