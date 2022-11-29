@@ -66,7 +66,7 @@
 //     socd_strategies::allNeutral
 //     socd_strategies::lastInputPriority
 #define SOCD_STRATEGY_SYCLE_DELAY 1
-#define SOCD_STRATEGY_CYCLE_BUTTONS &PS, &Start
+#define SOCD_STRATEGY_CYCLE_BUTTONS &Select, &Start
 
 // You can now switch SOCD type in real-time using SOCD_STRATEGY_CYCLE_BUTTONS to do so.
 // Switching to next available SOCD method will only happen if all listed buttons are pressed
@@ -90,7 +90,7 @@
 
 
 // Default debounce amount in ms
-#define DEBOUNCE_DEFAULT_MS 5
+#define DEBOUNCE_DEFAULT_MS 3
 
 // Potentially customizable debounce timing for every button
 #define DEBOUNCE_BUT_X              DEBOUNCE_DEFAULT_MS
@@ -140,7 +140,7 @@ namespace board_config
     PIN_R2        = 15,
     PIN_SELECT    = 18, // A0
     PIN_START     = 19, // A1
-    PIN_PS        = 20, // A2
+    PIN_R3        = 20, // A2
     PIN_L3        = 21  // A3
     //*/
 
@@ -1135,27 +1135,27 @@ class Btn_START : public ButtonDebounced
     }
 };
 
-class Btn_PS : public ButtonDebounced
+class Btn_R3 : public ButtonDebounced
 {
   public:
-    constexpr Btn_PS(enPinsBUTTONS pin = enPinsBUTTONS::PIN_PS, unsigned long debounceMs = DEBOUNCE_BUT_PS) noexcept : ButtonDebounced(pin, debounceMs)
+    constexpr Btn_R3(enPinsBUTTONS pin = enPinsBUTTONS::PIN_R3, unsigned long debounceMs = DEBOUNCE_BUT_R3) noexcept : ButtonDebounced(pin, debounceMs)
     {}
 
   protected:
     virtual void reportTo(hid_report_t& target) const noexcept 
     {
-      constexpr auto mask = bfButtonHID::HID_PS;
+      constexpr auto mask = bfButtonHID::HID_R3;
       auto& buttons = target.buttons;
 
       if(btnIsPressed())
       {
         regButtonPressed(buttons, mask);
-        debugPrintf_BUTTONS("Button Pressed:  [PS]");
+        debugPrintf_BUTTONS("Button Pressed:  [R3]");
       }
       else
       {
         regButtonReleased(buttons, mask);
-        debugPrintf_BUTTONS_RELEASED("Button Released:  [PS]");
+        debugPrintf_BUTTONS_RELEASED("Button Released:  [R3]");
       }
     }
 };
@@ -1277,7 +1277,7 @@ namespace buttons_storage
   static const auto R2        = Btn_R2();
   static const auto Select    = Btn_SELECT();
   static const auto Start     = Btn_START();
-  static const auto PS        = Btn_PS();
+  static const auto R3        = Btn_R3();
   static const auto L3        = Btn_L3();
 
   // Make socd switcher that switches based on button combination given
@@ -1332,7 +1332,7 @@ namespace all
       &R2,
       &Select,
       &Start,
-      &PS,
+      &R3,
       &L3,
       &dpad
     };
