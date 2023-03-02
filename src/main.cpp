@@ -90,7 +90,9 @@
 
 
 // Default debounce amount in ms
-#define DEBOUNCE_DEFAULT_MS 3
+#ifndef DEBOUNCE_DEFAULT_MS
+# define DEBOUNCE_DEFAULT_MS 4
+#endif
 
 // Potentially customizable debounce timing for every button
 #define DEBOUNCE_BUT_X              DEBOUNCE_DEFAULT_MS
@@ -114,6 +116,24 @@
 #define DEBOUNCE_BUT_DPAD_RIGHT     DEBOUNCE_DEFAULT_MS
 
 
+// Defines for directional buttons in case you're a dumbass like me and got them all wrong while wiring :)
+#ifndef PIN_NUM_UP
+# define PIN_NUM_UP 2
+#endif
+
+#ifndef PIN_NUM_DOWN
+# define PIN_NUM_DOWN 3
+#endif
+
+#ifndef PIN_NUM_LEFT
+# define PIN_NUM_LEFT 4
+#endif
+
+#ifndef PIN_NUM_RIGHT
+# define PIN_NUM_RIGHT 5
+#endif
+
+
 // I used an Arduino Pro Micro board, but it should work with any ATmega32U4-based board, just set the right pins below.
 // If you want L3/R3, the PS button or analog sticks, you'll need to add them.
 
@@ -123,10 +143,10 @@ namespace board_config
   enum enPins_Buttons : unsigned char 
   {
     //D-pad
-    PIN_UP        = 2,
-    PIN_DOWN      = 3,
-    PIN_LEFT      = 4,
-    PIN_RIGHT     = 5,
+    PIN_UP        = PIN_NUM_UP,
+    PIN_DOWN      = PIN_NUM_DOWN,
+    PIN_LEFT      = PIN_NUM_LEFT,
+    PIN_RIGHT     = PIN_NUM_RIGHT,
     //Others
     PIN_CROSS     = 6,
     PIN_CIRCLE    = 7,
@@ -404,20 +424,6 @@ inline void clearBit(TRGT& target, BF mask) noexcept
 }
 
 // Few helper templates to abstract bit operations even more
-template<typename BTN, typename BF, typename AXIS>
-inline void regButtonPressed(BTN& b, AXIS& a, BF mask) noexcept
-{
-  setBit(b, mask);
-  a = 0xff;
-}
-
-template<typename BTN, typename BF, typename AXIS>
-inline void regButtonReleased(BTN& b, AXIS& a, BF mask) noexcept
-{
-  clearBit(b, mask);
-  a = 0x00;
-}
-
 template<typename BTN, typename BF>
 inline void regButtonPressed(BTN& b, BF mask) noexcept
 {
@@ -429,6 +435,22 @@ inline void regButtonReleased(BTN& b, BF mask) noexcept
 {
   clearBit(b, mask);
 }
+
+template<typename BTN, typename BF, typename AXIS>
+inline void regButtonPressed(BTN& b, AXIS& a, BF mask) noexcept
+{
+  regButtonPressed(b, mask);
+  a = 0xff;
+}
+
+template<typename BTN, typename BF, typename AXIS>
+inline void regButtonReleased(BTN& b, AXIS& a, BF mask) noexcept
+{
+  regButtonReleased(b, mask);
+  a = 0x00;
+}
+
+
 
 
 // Ignore _inner namespace, it's for poor man's array
