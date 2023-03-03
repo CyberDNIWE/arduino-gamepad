@@ -712,14 +712,18 @@ namespace cleaner_strategy
     }
   };
   
+#ifndef DEFAULT_STRATEGY_IDX
+# define DEFAULT_STRATEGY_IDX 0
+#endif
+
   template<typename CMB_CHKR>
   struct StrategySwitcher : public SOCD_CleaningStrategy
   {
     public:
 
     constexpr StrategySwitcher(const SOCD_CleaningStrategy* const* strategies, size_t size, const CMB_CHKR& combination, unsigned long nextPressTimeoutSecondsAmt = SOCD_STRATEGY_SYCLE_DELAY) :
-        m_strategies(strategies), m_currentStrategy(strategies[0] ? strategies[0] : nullptr), 
-        m_isComboCurrentlyPressed(combination), m_currentIdx(0), m_strategies_size(size),
+        m_strategies(strategies), m_currentStrategy(strategies[DEFAULT_STRATEGY_IDX] ? strategies[DEFAULT_STRATEGY_IDX] : nullptr), 
+        m_isComboCurrentlyPressed(combination), m_currentIdx(DEFAULT_STRATEGY_IDX), m_strategies_size(size),
         m_activeTimeoutAmt(nextPressTimeoutSecondsAmt * 1000UL), m_becomesActiveAt(0UL)
     {}
 
