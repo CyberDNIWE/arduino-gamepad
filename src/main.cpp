@@ -150,8 +150,8 @@ namespace board_config
     //Others
     PIN_CROSS     = 6,
     PIN_CIRCLE    = 7,
-    PIN_TRIANGLE  = 8,
-    PIN_SQUARE    = 9,
+    PIN_TRIANGLE  = 9, //8
+    PIN_SQUARE    = 8, //9
     PIN_L1        = 10,
     // For Micro Pro:
     //*
